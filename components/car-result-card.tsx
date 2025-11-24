@@ -1,8 +1,23 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { ExternalLink, ShoppingCart } from 'lucide-react';
+
+interface ForSaleListing {
+  site: string;
+  name: string;
+  url: string;
+  available: boolean;
+}
+
+interface ForSaleData {
+  kenteken: string;
+  listings: ForSaleListing[];
+  hasListings: boolean;
+}
 
 interface CarData {
   kenteken?: string;
@@ -25,14 +40,44 @@ interface CarData {
   brandstof_omschrijving?: string;
   kleur?: string;
   matchedTerms?: string[];
+  forSale?: ForSaleData;
 }
 
 interface CarResultCardProps {
   car: CarData;
   onSelect?: (car: CarData) => void;
+  checkForSale?: boolean;
 }
 
-export function CarResultCard({ car, onSelect }: CarResultCardProps) {
+export function CarResultCard({ car, onSelect, checkForSale = true }: CarResultCardProps) {
+  const [forSaleData, setForSaleData] = useState<ForSaleData | null>(car.forSale || null);
+  const [loadingForSale, setLoadingForSale] = useState(false);
+
+  useEffect(() => {
+    if (checkForSale && !forSaleData && car.kenteken) {
+      setLoadingForSale(true);
+      const params = new URLSearchParams({
+        kenteken: car.kenteken,
+      });
+      if (car.merk) params.append('merk', car.merk);
+      if (car.handelsbenaming) params.append('handelsbenaming', car.handelsbenaming);
+
+      fetch(`/api/rdw/for-sale?${params.toString()}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.listings) {
+            setForSaleData(data);
+          }
+        })
+        .catch(err => {
+          console.error('Error fetching for-sale data:', err);
+        })
+        .finally(() => {
+          setLoadingForSale(false);
+        });
+    }
+  }, [car.kenteken, car.merk, car.handelsbenaming, checkForSale, forSaleData]);
+
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'N/A';
     try {
@@ -41,6 +86,11 @@ export function CarResultCard({ car, onSelect }: CarResultCardProps) {
     } catch {
       return dateString;
     }
+  };
+
+  const handleLinkClick = (e: React.MouseEvent, url: string) => {
+    e.stopPropagation();
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -64,6 +114,7 @@ export function CarResultCard({ car, onSelect }: CarResultCardProps) {
             </Badge>
           )}
         </div>
+        {/* "Te koop" badge removed - only showing search links */}
         {car.matchedTerms && car.matchedTerms.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-2">
             {car.matchedTerms.map((term, idx) => (
@@ -111,6 +162,27 @@ export function CarResultCard({ car, onSelect }: CarResultCardProps) {
             </div>
           )}
         </div>
+        {forSaleData && forSaleData.listings && forSaleData.listings.length > 0 && (
+          <div className="pt-3 mt-3 border-t space-y-2">
+            <div className="text-xs font-semibold text-muted-foreground mb-2">
+              Zoek op verkoopsites:
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {forSaleData.listings.slice(0, 3).map((listing, idx) => (
+                <Button
+                  key={idx}
+                  variant="outline"
+                  size="sm"
+                  className="text-xs h-7"
+                  onClick={(e) => handleLinkClick(e, listing.url)}
+                >
+                  {listing.name}
+                  <ExternalLink className="h-3 w-3 ml-1" />
+                </Button>
+              ))}
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
